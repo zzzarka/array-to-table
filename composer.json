@@ -1,0 +1,29 @@
+{
+  "name": "zzzarka/array-to-table",
+  "description": "simple php library to show arrays as tables",
+  "type": "library",
+  "autoload": {
+    "psr-4": {
+      "ArrayToTable\\": "src/"
+    }
+  },
+  "authors": [
+    {
+      "name": "Jonas Erixon",
+      "email": "jonas.erixon@centra.com"
+    }
+  ],
+  "minimum-stability": "stable",
+  "require": {
+    "php": "^8.3.0",
+    "ext-mbstring": "*"
+  },
+  "require-dev": {
+    "squizlabs/php_codesniffer": "^3.7"
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  }
+}
