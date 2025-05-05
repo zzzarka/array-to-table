@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/../vendor/autoload.php";
 
-use ArrayToTable\CliTableRender;
+use ArrayToTable\AsciiTable;
 
-$table = new CliTableRender();
+$table = new AsciiTable();
 
 $table->printResultTable([
     ["Test"],
