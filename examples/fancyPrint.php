@@ -16,6 +16,7 @@ $tableData = [
     ["4", "fourth col", "o yeah"],
     ["5", "fifth col", " this is a drag .. "],
     ["6", "sixth col", " .. "],
+    ["7", "seventh \n\n\ncol", "a text\n with\nline break but also section that is to long"],
     [],
     [0 => "2", 2 => "third col that is too long"],
 ];
@@ -33,7 +34,7 @@ echo "Lets try with wrapped text: " . PHP_EOL;
 
 $table = new AsciiTable(
     style: AsciiTableStyle::prettyAscii(),
-    options: new TableOptions(newlinesIsNewRows: false, wrapTextAfter: 10, cutLongTextAfter: 0, showRowCount: false),
+    options: new TableOptions(newlinesIsNewRows: true, wrapTextAfter: 10, cutLongTextAfter: 0, showRowCount: false),
 );
 $table->printResultTable($tableData);
 
@@ -42,8 +43,8 @@ echo PHP_EOL;
 //*
 echo "Line between rows, fancy" . PHP_EOL;
 $table2 = new AsciiTable(
-    style: AsciiTableStyle::prettyAscii(),
-    options: new TableOptions(lineBetweenRows: true)
+    style: null, //AsciiTableStyle::prettyAscii(),
+    options: new TableOptions(lineBetweenRows: false)
 );
 $table2->printResultTable([
     ["Test", "Test 2", "test 3"],

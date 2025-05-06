@@ -21,12 +21,16 @@ class AsciiTable
 
     public function printResultTable(array $rows): void
     {
+        $header = $this->options->getHeaderRow($rows);
         $this->style->colors?->echoTextColor();
-        if ($this->options->newlinesIsNewRows) {
-            $rows = $this->preprocessNewLinesToRows($rows);
-        }
 
-        $colWidths = $this->getMaxColCharacters($rows, $this->style->vertical, $this->options->maxColumnChars());
+        [$rows, $extraRows] = $this->preprocessNewLinesToRows($rows);
+
+        $colWidths = $this->getMaxColCharacters(
+            array_merge([$header], $rows), //TODO: expand and merge $extraRows
+            $this->style->vertical,
+            $this->options->maxColumnChars()
+        );
 
         if ($this->options->showRowCount) {
             echo "Row count: " . count($rows) . PHP_EOL;
@@ -36,7 +40,7 @@ class AsciiTable
             $this->drawLine($colWidths, true, 0);
         }
 
-        if ($header = $this->options->getHeaderRow($rows)) {
+        if ($header) {
             $this->style->colors?->echoHeaderColor();
             echo $this->style->vertical;
             foreach ($header as $k => $col) {
@@ -67,7 +71,6 @@ class AsciiTable
             $this->style->colors?->echoDataLineColor($dataLineCounter);
             echo $this->style->vertical;
 
-            $drawExtraRows = [];
             foreach ($colWidths as $k => $width) {
                 $value = $row[$k] ?? '';
                 if (is_numeric($value)) {
@@ -75,39 +78,16 @@ class AsciiTable
                     echo mb_str_pad($colStr, $width + ($this->options->paddingH * 2), " ", STR_PAD_BOTH);
                     echo $this->style->vertical;
                 } else {
-                    if ($this->options->replaceNewlineWith !== null) {
-                        $value = $this->escapeNewline((string) $value);
-                    }
-                    if ($this->options->replaceVerticalWith !== null) {
-                        $value = str_replace('|', $this->options->replaceVerticalWith, $value);
-                    }
-
-                    if ($this->options->cutLongTextAfter && mb_strlen($value) > $this->options->cutLongTextAfter) {
-                        $value = mb_substr($value, 0, $this->options->cutLongTextAfter - 2) . '...';
-                    }
-
-                    $length = mb_strlen($value);
-                    if ($this->options->wrapTextAfter <= 0 || $length < $this->options->wrapTextAfter) {
-                        $colStr = mb_str_pad($value, $width, " ");
-                        echo mb_str_pad($colStr, $width + ($this->options->paddingH * 2), " ", STR_PAD_BOTH);
-                        echo $this->style->vertical;
-                    } else {
-                        $lines = mb_str_split($value, $colWidths[$k]);
-                        $printNow = array_shift($lines);
-                        $colStr = mb_str_pad($printNow, $width, " ");
-                        echo mb_str_pad($colStr, $width + ($this->options->paddingH * 2), " ", STR_PAD_BOTH);
-                        echo $this->style->vertical;
-                        foreach ($lines as $extraRowKey => $l) {
-                            $drawExtraRows[$extraRowKey][$k] = $l;
-                        }
-                    }
+                    $colStr = mb_str_pad($value, $width, " ");
+                    echo mb_str_pad($colStr, $width + ($this->options->paddingH * 2), " ", STR_PAD_BOTH);
+                    echo $this->style->vertical;
                 }
             }
 
             $this->style->colors?->echoResetColorBackground();
             echo PHP_EOL;
 
-            foreach ($drawExtraRows as $extraRow) {
+            foreach ($extraRows[$rowKey] ?? [] as $extraRow) {
                 $this->style->colors?->echoDataLineColor($dataLineCounter);
                 echo $this->style->vertical;
                 foreach ($colWidths as $k => $width) {
@@ -172,14 +152,12 @@ class AsciiTable
             $maxLen += mb_strlen($separator);
         }
         $colLengths = [];
-        $header = array_shift($rows);
-        foreach ($header as $k => $col) {
-            $colLengths[$k] = mb_strlen($col);
-        }
         foreach ($rows as $row) {
             foreach ($row as $k => $value) {
                 $len = mb_strlen((string) $value);
-                if ($len > $colLengths[$k]) {
+                if (!isset($colLengths[$k])) {
+                    $colLengths[$k] = $len;
+                } elseif ($len > $colLengths[$k]) {
                     if ($maxLen > 0 && $len > $maxLen) {
                         $colLengths[$k] = max($colLengths[$k], $maxLen);
                     } else {
@@ -199,38 +177,49 @@ class AsciiTable
 
     private function preprocessNewLinesToRows(array $rows): array
     {
-        $newRows = [];
-        foreach ($rows as $row) {
+        $extraRows = [];
+        foreach ($rows as $outerRowKey => $row) {
             if (empty($row)) {
-                if ($this->options->emptyRowIsSeparator) {
-                    $newRows[] = [];
-                }
                 continue;
             }
-            $extraRows = [];
-            $newCols = [];
             foreach ($row as $k => $col) {
-                $lines = explode("\n", (string) $col);
-                foreach ($lines as &$l) {
-                    $l = $this->escapeNewline($l);
+                if ($this->options->cutLongTextAfter && mb_strlen($col) > $this->options->cutLongTextAfter) {
+                    $col = mb_substr($col, 0, $this->options->cutLongTextAfter) . '...';
                 }
-                $newCols[$k] = array_shift($lines);
-                if ($lines) {
-                    foreach ($lines as $rowKey => $line) {
-                        $extraRows[$rowKey][$k] = $line;
+
+                if ($this->options->replaceVerticalWith !== null) {
+                    $col = str_replace('|', $this->options->replaceVerticalWith, $col);
+                }
+
+                if ($this->options->newlinesIsNewRows) {
+                    //TODO: leaks \r linebreaks in case of \r\n
+                    $lines = explode("\n", (string) $col);
+                } else {
+                    $lines = [$col];
+                }
+
+                $linesAgain = [];
+                foreach ($lines as $l) {
+                    $escapedLine = $this->escapeNewline($l);
+                    if ($this->options->wrapTextAfter && mb_strlen($escapedLine) > $this->options->wrapTextAfter) {
+                        //TODO: use word wrap instead of char wrap .. but need to find multibyte capable version
+                        $subDivided = mb_str_split($escapedLine, $this->options->wrapTextAfter);
+                        foreach ($subDivided as $division) {
+                            $linesAgain[] = $division;
+                        }
+                    } else {
+                        $linesAgain[] = $escapedLine;
+                    }
+                }
+                $rows[$outerRowKey][$k] = array_shift($linesAgain);
+                if ($linesAgain) {
+                    foreach ($linesAgain as $rowKey => $line) {
+                        $extraRows[$outerRowKey][$rowKey][$k] = $line;
                     }
                 }
             }
-            $newRows[] = $newCols;
-            foreach ($extraRows as $extraCols) {
-                $cols = [];
-                foreach ($extraCols as $k => $col) {
-                    $cols[$k] = $col;
-                }
-                $newRows[] = $cols;
-            }
         }
 
-        return $newRows;
+        return [$rows, $extraRows];
     }
 }
